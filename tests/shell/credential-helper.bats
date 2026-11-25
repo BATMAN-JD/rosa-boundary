@@ -511,3 +511,29 @@ STUB
     wait "${pid}" || true
     [ ! -e "${KUBE_DIR}/config" ]
 }
+
+@test "terminated backplane login removes its kubeconfig even without a clear" {
+    cat >"${STUBS}/ocm" <<'STUB'
+#!/bin/bash
+printf 'partial' >"${STUB_KUBE_DIR}/config"
+: >"${STUB_STATE}/written"
+sleep 30
+STUB
+    chmod 0755 "${STUBS}/ocm"
+    printf '{}' >"${OCM_DIR}/ocm.json"
+    state="${TEST_ROOT}/state-noclear"
+    mkdir -p "${state}"
+    PATH="${STUBS}:${PATH}" STUB_STATE="${state}" STUB_KUBE_DIR="${KUBE_DIR}" setsid bash -c '
+        source "$1"
+        OCM_CONFIG_DIR="$2"
+        KUBECONFIG_DIR="$3"
+        login_backplane 2abc
+    ' bash "${HELPER}" "${OCM_DIR}" "${KUBE_DIR}" >/dev/null 2>&1 &
+    pid=$!
+    for _ in $(seq 1 100); do [[ -e "${state}/written" ]] && break; sleep 0.1; done
+    [ -e "${state}/written" ]
+    [ -e "${KUBE_DIR}/config" ]
+    kill -TERM -- "-${pid}"
+    wait "${pid}" || true
+    [ ! -e "${KUBE_DIR}/config" ]
+}
